@@ -31,28 +31,58 @@ input, button {
 
 <script type="module">
 
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
+
+// CRITICAL FIXES
+env.allowLocalModels = false;
+env.useBrowserCache = true;
 
 let generator;
 let history = "";
 
+// LOAD MODEL
 async function load() {
 
-  generator = await pipeline(
-    "text-generation",
-    "Xenova/distilgpt2",
-    { quantized: true }
-  );
+  try {
 
-  document.getElementById("status").innerText = "AI hazır";
+    document.getElementById("status").innerText = "Model indiriliyor...";
+
+    generator = await pipeline(
+      "text-generation",
+      "Xenova/distilgpt2",
+      {
+        quantized: true,
+        progress_callback: (p) => {
+          document.getElementById("status").innerText =
+            "İndiriliyor: " + Math.round(p.progress || 0) + "%";
+        }
+      }
+    );
+
+    document.getElementById("status").innerText = "AI hazır";
+
+  } catch (e) {
+
+    document.getElementById("status").innerText =
+      "HATA: " + e.message;
+
+    console.error(e);
+  }
 }
 
+// SEND MESSAGE
 window.send = async function() {
+
+  if (!generator) {
+    alert("AI henüz hazır değil");
+    return;
+  }
 
   const input = document.getElementById("input");
   const chat = document.getElementById("chat");
 
   const userText = input.value.trim();
+
   if (!userText) return;
 
   chat.innerHTML += "\n🧑 Sen: " + userText;
@@ -60,25 +90,39 @@ window.send = async function() {
 
   input.value = "";
 
-  const prompt =
-    history +
-    "\nUser: " + userText +
-    "\nAI:";
+  try {
 
-  const result = await generator(prompt, {
-    max_new_tokens: 20,
-    do_sample: false
-  });
+    const prompt =
+      history +
+      "\nUser: " + userText +
+      "\nAI:";
 
-  let output = result[0].generated_text;
+    const result = await generator(prompt, {
+      max_new_tokens: 30,
+      do_sample: false
+    });
 
-  let answer = output.split("AI:").pop().trim();
+    let output = result[0].generated_text;
 
-  chat.innerHTML =
-    chat.innerHTML.replace("🤖 AI düşünüyor...", "🤖 AI: " + answer);
+    let answer = output.split("AI:").pop().trim();
 
-  history += "\nUser: " + userText + "\nAI: " + answer;
+    if (!answer) answer = "...";
 
+    chat.innerHTML =
+      chat.innerHTML.replace("🤖 AI düşünüyor...", "🤖 AI: " + answer);
+
+    history += "\nUser: " + userText + "\nAI: " + answer;
+
+  } catch (e) {
+
+    chat.innerHTML =
+      chat.innerHTML.replace(
+        "🤖 AI düşünüyor...",
+        "❌ HATA: " + e.message
+      );
+
+    console.error(e);
+  }
 }
 
 load();
