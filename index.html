@@ -22,7 +22,7 @@ input,button{
 </head>
 <body>
 
-<h2 id="status">Loading AI...</h2>
+<h2 id="status">Loading...</h2>
 
 <input id="input" placeholder="Message">
 <button onclick="send()">Send</button>
@@ -34,40 +34,52 @@ input,button{
 import { pipeline, env } from
 "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
+// CRITICAL ANDROID FIX
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+env.backends.onnx.wasm.numThreads = 1;
+env.backends.onnx.wasm.simd = false;
 
 let pipe;
 
-const system =
+let history =
 "You are a helpful assistant.";
 
-let history = system;
-
-// LOAD
+// LOAD MODEL
 async function init(){
 
-  document.getElementById("status").innerText =
-  "Downloading model...";
+  try{
 
-  pipe = await pipeline(
-    "text-generation",
-    "Xenova/gpt2",
-    {
-      quantized:true
-    }
-  );
+    document.getElementById("status").innerText =
+    "Downloading small model...";
 
-  document.getElementById("status").innerText =
-  "AI Ready";
+    pipe = await pipeline(
+      "text-generation",
+      "Xenova/distilgpt2",
+      {
+        quantized:true
+      }
+    );
+
+    document.getElementById("status").innerText =
+    "AI Ready";
+
+  }catch(e){
+
+    document.getElementById("status").innerText =
+    "ERROR: "+e.message;
+
+    console.log(e);
+
+  }
 
 }
 
-// SEND
+// SEND MESSAGE
 window.send = async function(){
 
   if(!pipe){
-    alert("Wait for AI to load");
+    alert("Model still loading");
     return;
   }
 
@@ -84,38 +96,50 @@ window.send = async function(){
 
   chat.innerHTML +=
   "\nYOU: "+msg+
-  "\nAI: ...";
+  "\nAI: thinking...";
 
   input.value="";
 
-  const prompt =
-  history+
-  "\nUser:"+msg+
-  "\nAssistant:";
+  try{
 
-  const out =
-  await pipe(prompt,{
-    max_new_tokens:50,
-    temperature:0.7
-  });
+    const prompt =
+    history+
+    "\nUser:"+msg+
+    "\nAssistant:";
 
-  const full =
-  out[0].generated_text;
+    const result =
+    await pipe(prompt,{
+      max_new_tokens:20,
+      do_sample:false
+    });
 
-  let reply =
-  full.slice(prompt.length).trim();
+    const text =
+    result[0].generated_text;
 
-  if(!reply) reply="Ok.";
+    let reply =
+    text.slice(prompt.length).trim();
 
-  chat.innerHTML =
-  chat.innerHTML.replace(
-  "AI: ...",
-  "AI: "+reply
-  );
+    if(!reply) reply="Ok.";
 
-  history+=
-  "\nUser:"+msg+
-  "\nAssistant:"+reply;
+    chat.innerHTML =
+    chat.innerHTML.replace(
+      "AI: thinking...",
+      "AI: "+reply
+    );
+
+    history+=
+    "\nUser:"+msg+
+    "\nAssistant:"+reply;
+
+  }catch(e){
+
+    chat.innerHTML =
+    chat.innerHTML.replace(
+      "AI: thinking...",
+      "ERROR: "+e.message
+    );
+
+  }
 
 }
 
